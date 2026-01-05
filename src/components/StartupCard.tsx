@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCompact, getCountryFlag, isNordicCountry } from "@/lib/utils";
 import type { StartupWithMetrics } from "@/lib/supabase/queries";
+import { Sparkles } from "lucide-react";
 
 interface StartupCardProps {
   startup: StartupWithMetrics;
@@ -14,6 +15,7 @@ interface StartupCardProps {
 export function StartupCard({ startup, index }: StartupCardProps) {
   const metrics = startup.metrics;
   const isNordic = isNordicCountry(startup.country);
+  const isSponsored = startup.sponsorship?.status === "active";
 
   return (
     <motion.div
@@ -26,11 +28,21 @@ export function StartupCard({ startup, index }: StartupCardProps) {
           whileHover={{ scale: 1.02, y: -4 }}
           transition={{ type: "spring", stiffness: 300 }}
         >
-          <Card className="glass-strong h-full cursor-pointer hover:border-primary/50 transition-all">
+          <Card className={`glass-strong h-full cursor-pointer hover:border-primary/50 transition-all ${
+            isSponsored ? "border-primary/50 ring-2 ring-primary/20 bg-primary/5" : ""
+          }`}>
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-xl font-bold mb-1">{startup.name}</h3>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-xl font-bold">{startup.name}</h3>
+                    {isSponsored && (
+                      <span className="px-2 py-0.5 bg-primary text-primary-foreground rounded-full text-xs flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        Sponsored
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>{getCountryFlag(startup.country)}</span>
                     <span>{startup.country}</span>

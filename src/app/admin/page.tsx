@@ -28,11 +28,24 @@ interface Startup {
   } | null;
 }
 
+interface Sponsorship {
+  id: string;
+  startup_id: string;
+  startup_name: string;
+  type: string;
+  status: string;
+  stripe_subscription_id: string | null;
+  start_date: string | null;
+  end_date: string | null;
+}
+
 export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
   const [startups, setStartups] = useState<Startup[]>([]);
+  const [sponsorships, setSponsorships] = useState<Sponsorship[]>([]);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"startups" | "sponsorships">("startups");
 
   useEffect(() => {
     // Check if already authenticated (simple cookie-based check)
@@ -63,10 +76,19 @@ export default function AdminPage() {
   const fetchStartups = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/admin/startups");
-      if (response.ok) {
-        const data = await response.json();
+      const [startupsRes, sponsorshipsRes] = await Promise.all([
+        fetch("/api/admin/startups"),
+        fetch("/api/admin/sponsorships"),
+      ]);
+
+      if (startupsRes.ok) {
+        const data = await startupsRes.json();
         setStartups(data);
+      }
+
+      if (sponsorshipsRes.ok) {
+        const data = await sponsorshipsRes.json();
+        setSponsorships(data);
       }
     } catch (error) {
       console.error(error);
@@ -89,6 +111,27 @@ export default function AdminPage() {
     } catch (error) {
       console.error(error);
       alert("Sync failed");
+    }
+  };
+
+  const handleDeactivateSponsorship = async (sponsorshipId: string) => {
+    if (!confirm("Are you sure you want to deactivate this sponsorship?")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/admin/sponsorships/${sponsorshipId}/deactivate`, {
+        method: "POST",
+      });
+      if (response.ok) {
+        alert("Sponsorship deactivated");
+        fetchStartups();
+      } else {
+        alert("Failed to deactivate");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Failed to deactivate");
     }
   };
 
@@ -122,12 +165,36 @@ export default function AdminPage() {
     <div className="min-h-screen container mx-auto px-4 py-16">
       <div className="mb-8">
         <h1 className="text-4xl font-bold mb-2">Admin Dashboard</h1>
-        <p className="text-muted-foreground">Manage startups and sync metrics</p>
+        <p className="text-muted-foreground">Manage startups, sponsorships, and sync metrics</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-4 mb-6 border-b">
+        <button
+          onClick={() => setActiveTab("startups")}
+          className={`pb-2 px-4 font-semibold transition-colors ${
+            activeTab === "startups"
+              ? "border-b-2 border-primary text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Startups
+        </button>
+        <button
+          onClick={() => setActiveTab("sponsorships")}
+          className={`pb-2 px-4 font-semibold transition-colors ${
+            activeTab === "sponsorships"
+              ? "border-b-2 border-primary text-primary"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Sponsorships ({sponsorships.length})
+        </button>
       </div>
 
       {loading ? (
         <div className="text-center py-16">Loading...</div>
-      ) : (
+      ) : activeTab === "startups" ? (
         <div className="space-y-4">
           {startups.map((startup) => (
             <motion.div
@@ -202,6 +269,64 @@ export default function AdminPage() {
               </Card>
             </motion.div>
           ))}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {sponsorships.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              No sponsorships found
+            </div>
+          ) : (
+            sponsorships.map((sponsorship) => (
+              <motion.div
+                key={sponsorship.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <Card className="glass-strong">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold mb-2">{sponsorship.startup_name}</h3>
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          <div>
+                            Type: <span className="font-semibold capitalize">{sponsorship.type.replace("_", " ")}</span>
+                          </div>
+                          <div>
+                            Status: <span className={`font-semibold ${
+                              sponsorship.status === "active" ? "text-green-500" :
+                              sponsorship.status === "cancelled" ? "text-red-500" :
+                              "text-yellow-500"
+                            }`}>{sponsorship.status}</span>
+                          </div>
+                          {sponsorship.start_date && (
+                            <div>Start: {new Date(sponsorship.start_date).toLocaleDateString()}</div>
+                          )}
+                          {sponsorship.end_date && (
+                            <div>End: {new Date(sponsorship.end_date).toLocaleDateString()}</div>
+                          )}
+                          {sponsorship.stripe_subscription_id && (
+                            <div className="text-xs">
+                              Subscription: {sponsorship.stripe_subscription_id}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {sponsorship.status === "active" && (
+                        <Button
+                          onClick={() => handleDeactivateSponsorship(sponsorship.id)}
+                          variant="destructive"
+                          size="sm"
+                        >
+                          Deactivate
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))
+          )}
         </div>
       )}
     </div>

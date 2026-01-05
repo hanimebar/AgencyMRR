@@ -31,12 +31,25 @@ export interface StartupMetrics {
   updated_at: string;
 }
 
+export interface Sponsorship {
+  id: string;
+  startup_id: string;
+  type: string;
+  category: string | null;
+  status: string;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  start_date: string | null;
+  end_date: string | null;
+}
+
 export interface StartupWithMetrics extends Startup {
   metrics: StartupMetrics | null;
+  sponsorship?: Sponsorship | null;
 }
 
 /**
- * Get all startups with their current metrics
+ * Get all startups with their current metrics and active sponsorships
  */
 export async function getStartupsWithMetrics(filters?: {
   country?: string[];
@@ -46,11 +59,13 @@ export async function getStartupsWithMetrics(filters?: {
   maxMrr?: number;
   sortBy?: "mrr" | "last_30d_revenue" | "total_revenue";
 }): Promise<StartupWithMetrics[]> {
+  // Get all startups with metrics and sponsorships
   let query = supabaseAdmin
     .from("startups")
     .select(`
       *,
-      startup_metrics_current (*)
+      startup_metrics_current (*),
+      sponsorships (*)
     `);
 
   // Apply filters
@@ -66,47 +81,64 @@ export async function getStartupsWithMetrics(filters?: {
 
   if (error) throw error;
 
-  // Filter by metrics (can't do this in SQL easily with joins)
-  let startups = (data || []).map((s: any) => ({
-    ...s,
-    metrics: s.startup_metrics_current?.[0] || null,
-  })) as StartupWithMetrics[];
+  // Process startups and find active sponsorships
+  let allStartups = (data || []).map((s: any) => {
+    const activeSponsorship = (s.sponsorships || []).find(
+      (sp: any) => sp.status === "active"
+    ) || null;
+
+    return {
+      ...s,
+      metrics: s.startup_metrics_current?.[0] || null,
+      sponsorship: activeSponsorship,
+    };
+  }) as StartupWithMetrics[];
 
   // Filter by provider
   if (filters?.provider && filters.provider.length > 0) {
-    startups = startups.filter(
+    allStartups = allStartups.filter(
       (s) => s.metrics && filters.provider!.includes(s.metrics.provider as ProviderName)
     );
   }
 
   // Filter by MRR range
   if (filters?.minMrr !== undefined) {
-    startups = startups.filter((s) => (s.metrics?.mrr || 0) >= filters.minMrr!);
+    allStartups = allStartups.filter((s) => (s.metrics?.mrr || 0) >= filters.minMrr!);
   }
   if (filters?.maxMrr !== undefined) {
-    startups = startups.filter((s) => (s.metrics?.mrr || 0) <= filters.maxMrr!);
+    allStartups = allStartups.filter((s) => (s.metrics?.mrr || 0) <= filters.maxMrr!);
   }
 
-  // Sort
+  // Sort: First sponsored startups (by MRR), then non-sponsored (by MRR)
   const sortBy = filters?.sortBy || "mrr";
-  startups.sort((a, b) => {
+  const sponsored = allStartups.filter((s) => s.sponsorship?.status === "active");
+  const nonSponsored = allStartups.filter((s) => !s.sponsorship || s.sponsorship.status !== "active");
+
+  sponsored.sort((a, b) => {
     const aVal = a.metrics?.[sortBy] || 0;
     const bVal = b.metrics?.[sortBy] || 0;
     return bVal - aVal;
   });
 
-  return startups;
+  nonSponsored.sort((a, b) => {
+    const aVal = a.metrics?.[sortBy] || 0;
+    const bVal = b.metrics?.[sortBy] || 0;
+    return bVal - aVal;
+  });
+
+  return [...sponsored, ...nonSponsored];
 }
 
 /**
- * Get startup by slug
+ * Get startup by slug with active sponsorship
  */
 export async function getStartupBySlug(slug: string): Promise<StartupWithMetrics | null> {
   const { data, error } = await supabaseAdmin
     .from("startups")
     .select(`
       *,
-      startup_metrics_current (*)
+      startup_metrics_current (*),
+      sponsorships (*)
     `)
     .eq("slug", slug)
     .single();
@@ -116,9 +148,15 @@ export async function getStartupBySlug(slug: string): Promise<StartupWithMetrics
     throw error;
   }
 
+  // Get active sponsorship
+  const activeSponsorship = (data.sponsorships || []).find(
+    (s: any) => s.status === "active"
+  ) || null;
+
   return {
     ...data,
     metrics: data.startup_metrics_current?.[0] || null,
+    sponsorship: activeSponsorship,
   } as StartupWithMetrics;
 }
 

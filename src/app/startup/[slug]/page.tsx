@@ -3,6 +3,7 @@ import { getStartupBySlug } from "@/lib/supabase/queries";
 import { formatCurrency, formatRelativeTime, getCountryFlag, isNordicCountry } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StartupMetricsChart } from "@/components/StartupMetricsChart";
+import { SponsorshipCTA } from "@/components/SponsorshipCTA";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
@@ -141,6 +142,15 @@ export default async function StartupDetailPage({
             </CardContent>
           </Card>
         )}
+
+        {/* Sponsorship CTA */}
+        <div className="mt-8">
+          <SponsorshipCTA
+            startupSlug={startup.slug}
+            hasActiveSponsorship={!!startup.sponsorship}
+            sponsorshipType={startup.sponsorship?.type}
+          />
+        </div>
       </div>
     </div>
   );

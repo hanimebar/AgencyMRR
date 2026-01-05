@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
  * 
  * This route:
  * 1. Takes a startup ID from query params
- * 2. Generates a Stripe Connect OAuth URL with read-only scopes
+ * 2. Generates a Stripe Connect OAuth URL with read_write scopes
  * 3. Redirects the user to Stripe
  * 
  * After OAuth, Stripe redirects to /api/providers/stripe/callback
@@ -38,8 +38,8 @@ export async function GET(request: NextRequest) {
 
     // Stripe Connect OAuth URL
     // See: https://stripe.com/docs/connect/oauth-reference
-    // Using read_only scope to ensure we can't charge customers
-    const connectUrl = `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=read_only&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+    // Using read_write scope for full access
+    const connectUrl = `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=${clientId}&scope=read_write&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
 
     return NextResponse.redirect(connectUrl);
   } catch (error: any) {

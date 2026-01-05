@@ -37,9 +37,10 @@ All tables and RLS policies are defined in `supabase/schema.sql`:
 - `provider_tokens` - Encrypted OAuth tokens (admin only, RLS protected)
 - `startup_metrics_current` - Current metrics snapshot (public read)
 - `startup_metrics_history` - Time-series history for charts (public read)
+- `sponsorships` - Paid sponsorships/featured listings (public read, see `supabase/migrations/sponsorships.sql`)
 
 **Security**: RLS policies ensure:
-- Public users can read startups and metrics
+- Public users can read startups, metrics, and sponsorships
 - Only service role can write/update
 - Provider tokens are never exposed to public
 
@@ -52,6 +53,7 @@ Run the schema in your Supabase project:
 ```bash
 # In Supabase SQL Editor, run:
 supabase/schema.sql
+supabase/migrations/sponsorships.sql
 ```
 
 Or via Supabase CLI:
@@ -69,9 +71,20 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 STRIPE_PLATFORM_SECRET_KEY=sk_live_...
 STRIPE_CLIENT_ID=ca_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 APP_BASE_URL=http://localhost:3000
 ADMIN_PASSWORD=your-secure-admin-password
 CRON_SECRET=optional-secret-for-cron-endpoint
+
+# Sponsorship Price IDs (from Stripe Dashboard > Products)
+FEATURED_LISTING_PRICE_ID=price_xxx
+CATEGORY_HERO_PRICE_ID=price_xxx
+HOMEPAGE_SPONSOR_PRICE_ID=price_xxx
+
+# Optional: Display price IDs in UI (client-side)
+NEXT_PUBLIC_FEATURED_LISTING_PRICE_ID=price_xxx
+NEXT_PUBLIC_CATEGORY_HERO_PRICE_ID=price_xxx
+NEXT_PUBLIC_HOMEPAGE_SPONSOR_PRICE_ID=price_xxx
 ```
 
 ### 3. Install Dependencies
@@ -223,6 +236,73 @@ npm run lint
 2. Set environment variables in dashboard
 3. Run database migrations in Supabase
 4. Set up cron job for metrics syncing
+
+## Sponsorship Monetization
+
+AgencyMRR includes a complete sponsorship system for monetizing the leaderboard.
+
+### Sponsorship Types
+
+1. **Featured Listing** - Pinned at the top of leaderboard segments
+2. **Category Hero** - Featured placement in category-specific leaderboards
+3. **Homepage Sponsor** - Premium placement on the homepage hero section
+
+### Setting Up Stripe for Sponsorships
+
+1. **Create Products in Stripe Dashboard**:
+   - Go to Stripe Dashboard > Products
+   - Create 3 products (Featured Listing, Category Hero, Homepage Sponsor)
+   - Set them as recurring subscriptions (monthly)
+   - Copy the Price IDs (starts with `price_`)
+
+2. **Set Environment Variables**:
+   ```env
+   FEATURED_LISTING_PRICE_ID=price_xxx
+   CATEGORY_HERO_PRICE_ID=price_xxx
+   HOMEPAGE_SPONSOR_PRICE_ID=price_xxx
+   ```
+
+3. **Configure Stripe Webhook**:
+   - Go to Stripe Dashboard > Developers > Webhooks
+   - Click "Add endpoint"
+   - URL: `https://your-domain.com/api/stripe/webhook`
+   - Events to listen for:
+     - `checkout.session.completed`
+     - `invoice.paid`
+     - `customer.subscription.deleted`
+   - Copy the webhook signing secret (starts with `whsec_`)
+   - Set as `STRIPE_WEBHOOK_SECRET` in your environment
+
+### How Sponsorship Ranking Works
+
+The leaderboard uses a **two-tier ranking system**:
+
+1. **Sponsored Startups First**: All startups with active `featured_listing` sponsorships are listed first, sorted by MRR (descending)
+2. **Non-Sponsored Startups**: Regular startups follow, also sorted by MRR (descending)
+
+This ensures sponsored startups get maximum visibility while maintaining fairness within each tier.
+
+### Sponsorship Flow
+
+1. **Founder visits `/advertise`** or clicks "Get a Featured Listing" on their startup page
+2. **Selects sponsorship type** and enters their startup slug
+3. **Clicks "Buy [Sponsorship Type]"** → Creates Stripe Checkout Session
+4. **Completes payment** in Stripe Checkout
+5. **Webhook activates sponsorship** → Status changes from `pending` to `active`
+6. **Startup appears at top of leaderboard** with "Sponsored" badge
+
+### Admin Management
+
+Admins can view and manage sponsorships in `/admin`:
+- View all sponsorships with status, dates, and Stripe subscription IDs
+- Manually deactivate sponsorships (sets status to `cancelled` and end_date)
+
+### Webhook Events
+
+The webhook handler processes:
+- `checkout.session.completed` - Activates sponsorship when payment succeeds
+- `invoice.paid` - Ensures sponsorship stays active on recurring payments
+- `customer.subscription.deleted` - Cancels sponsorship when subscription ends
 
 ## License
 
