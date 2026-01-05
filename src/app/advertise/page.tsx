@@ -15,36 +15,36 @@ const SPONSORSHIP_TYPES = [
     name: "Featured Listing",
     icon: Star,
     description: "Pinned at the top of the leaderboard in your segment",
+    price: 39,
     features: [
       "Pinned at the top of the leaderboard in your segment",
       "Special badge and highlight",
       "Recurring, cancel anytime",
     ],
-    priceId: process.env.NEXT_PUBLIC_FEATURED_LISTING_PRICE_ID || "Not configured",
   },
   {
     id: "category_hero",
     name: "Category Hero",
     icon: TrendingUp,
     description: "Featured placement in category-specific leaderboards",
+    price: 79,
     features: [
       "Featured placement in category-specific leaderboards",
       "Enhanced visibility in your category",
       "Recurring, cancel anytime",
     ],
-    priceId: process.env.NEXT_PUBLIC_CATEGORY_HERO_PRICE_ID || "Not configured",
   },
   {
     id: "homepage_sponsor",
     name: "Homepage Sponsor",
     icon: Home,
     description: "Premium placement on the homepage hero section",
+    price: 149,
     features: [
       "Premium placement on the homepage hero section",
       "Maximum visibility to all visitors",
       "Recurring, cancel anytime",
     ],
-    priceId: process.env.NEXT_PUBLIC_HOMEPAGE_SPONSOR_PRICE_ID || "Not configured",
   },
 ];
 
@@ -186,13 +186,14 @@ function AdvertiseContent() {
               {/* Price */}
               <div className="p-6 bg-primary/10 rounded-lg border border-primary/20">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold">Monthly Subscription</span>
+                  <span className="text-4xl font-bold">€{selectedSponsorship.price}</span>
+                  <span className="text-lg text-muted-foreground">/month</span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">
-                  Price ID: {selectedSponsorship.priceId}
+                  Recurring monthly subscription
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Exact pricing will be shown in Stripe Checkout
+                  Cancel anytime from your Stripe dashboard
                 </p>
               </div>
 
