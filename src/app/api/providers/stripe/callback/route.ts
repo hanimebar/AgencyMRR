@@ -4,34 +4,32 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-// Initialize clients with validation
-function getStripeClient() {
-  const key = process.env.STRIPE_PLATFORM_SECRET_KEY;
-  if (!key) {
-    throw new Error("STRIPE_PLATFORM_SECRET_KEY is not set");
-  }
-  return new Stripe(key, {
-    apiVersion: "2023-10-16",
-  });
-}
-
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error("Supabase credentials are not set");
-  }
-  return createClient(url, key);
-}
-
 /**
  * Handle Stripe OAuth callback
  */
 export async function GET(req: NextRequest) {
   try {
-    // Validate environment variables and initialize clients
-    const stripe = getStripeClient();
-    const supabaseAdmin = getSupabaseAdmin();
+    // Validate environment variables first
+    const stripeKey = process.env.STRIPE_PLATFORM_SECRET_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!stripeKey) {
+      console.error("STRIPE_PLATFORM_SECRET_KEY is not set");
+      return new NextResponse("Server configuration error: Stripe key missing", { status: 500 });
+    }
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("Supabase credentials missing", { hasUrl: !!supabaseUrl, hasKey: !!supabaseKey });
+      return new NextResponse("Server configuration error: Supabase credentials missing", { status: 500 });
+    }
+
+    // Initialize clients inside the function
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: "2023-10-16",
+    });
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
     const { searchParams } = new URL(req.url);
     const code = searchParams.get("code");
@@ -191,6 +189,7 @@ export async function GET(req: NextRequest) {
 
   } catch (error: any) {
     console.error("Unexpected error in Stripe callback:", error);
+    console.error("Error stack:", error?.stack);
     return new NextResponse(
       `Unexpected error: ${error?.message || JSON.stringify(error)}`,
       { status: 500 }

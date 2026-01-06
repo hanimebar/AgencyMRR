@@ -3,6 +3,10 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { getConnectionsToSync } from "@/lib/supabase/queries";
 import { getProviderAdapter } from "@/lib/providers/registry";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const revalidate = 0;
+
 /**
  * Cron endpoint to sync metrics for all connected providers
  * 
@@ -14,6 +18,7 @@ import { getProviderAdapter } from "@/lib/providers/registry";
 export async function GET(request: NextRequest) {
   try {
     // Optional: Add authentication check
+    // All header access happens inside the function, not at module level
     const authHeader = request.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
     
