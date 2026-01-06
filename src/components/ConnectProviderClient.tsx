@@ -3,17 +3,22 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { CheckCircle2, Clock } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 
 interface ConnectProviderClientProps {
-  startupId: string;
-  startupName: string;
+  startup: {
+    id: string;
+    slug: string;
+    name: string;
+    website_url: string;
+    country: string;
+    category: string;
+  };
 }
 
-export function ConnectProviderClient({ startupId, startupName }: ConnectProviderClientProps) {
+export function ConnectProviderClient({ startup }: ConnectProviderClientProps) {
   const handleConnectStripe = () => {
-    // Use startupId as query param name for consistency
-    window.location.href = `/api/providers/stripe/connect?startupId=${startupId}`;
+    window.location.href = `/api/providers/stripe/connect?startupId=${startup.id}`;
   };
 
   return (
@@ -28,11 +33,19 @@ export function ConnectProviderClient({ startupId, startupName }: ConnectProvide
           <CardHeader>
             <CardTitle className="text-3xl">Connect Your Payment Provider</CardTitle>
             <CardDescription>
-              Connect your payment provider to automatically sync your revenue metrics for <strong>{startupName}</strong>.
-              We use read-only access and never charge your customers.
+              Connect your payment provider to automatically sync your revenue metrics for <strong>{startup.name}</strong>.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Startup Info */}
+            <div className="p-4 bg-muted/50 rounded-lg mb-4">
+              <div className="text-sm text-muted-foreground mb-1">Startup</div>
+              <div className="font-semibold">{startup.name}</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {startup.country} • {startup.category}
+              </div>
+            </div>
+
             {/* Stripe Card */}
             <motion.div
               whileHover={{ scale: 1.02 }}
@@ -49,7 +62,7 @@ export function ConnectProviderClient({ startupId, startupName }: ConnectProvide
                       <ul className="text-sm space-y-2 mb-4">
                         <li className="flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 text-green-500" />
-                          Read-only access (no charge capability)
+                          Read-write access for metrics
                         </li>
                         <li className="flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 text-green-500" />
@@ -68,29 +81,6 @@ export function ConnectProviderClient({ startupId, startupName }: ConnectProvide
                 </CardContent>
               </Card>
             </motion.div>
-
-            {/* Coming Soon Providers */}
-            <div className="grid grid-cols-2 gap-4 mt-6">
-              {["Paddle", "Braintree", "PayPal", "Mollie"].map((provider) => (
-                <motion.div
-                  key={provider}
-                  whileHover={{ scale: 1.02 }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                >
-                  <Card className="opacity-50">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-bold mb-1">{provider}</h3>
-                          <p className="text-xs text-muted-foreground">Coming soon</p>
-                        </div>
-                        <Clock className="w-5 h-5 text-muted-foreground" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
           </CardContent>
         </Card>
       </motion.div>
