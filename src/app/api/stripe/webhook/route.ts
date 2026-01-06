@@ -1,17 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-const stripe = new Stripe(process.env.STRIPE_PLATFORM_SECRET_KEY || "", {
+const stripe = new Stripe(process.env.STRIPE_PLATFORM_SECRET_KEY!, {
   apiVersion: "2023-10-16",
 });
 
 /**
  * Stripe Webhook Handler
- * 
- * Handles Stripe webhook events for sponsorship subscriptions.
  * 
  * Configure in Stripe Dashboard:
  * - URL: https://your-domain.com/api/stripe/webhook
@@ -19,73 +17,70 @@ const stripe = new Stripe(process.env.STRIPE_PLATFORM_SECRET_KEY || "", {
  *   - checkout.session.completed
  *   - invoice.paid
  *   - customer.subscription.deleted
- *   - invoice.payment_failed (optional, for handling failed payments)
+ *   - invoice.payment_failed (optional)
  * 
  * Get your webhook secret from Stripe Dashboard > Developers > Webhooks
  * Set it as STRIPE_WEBHOOK_SECRET in your environment variables
  */
-export async function POST(request: NextRequest) {
-  const body = await request.text();
-  const signature = request.headers.get("stripe-signature");
-
-  if (!signature) {
-    return NextResponse.json(
-      { error: "Missing stripe-signature header" },
-      { status: 400 }
-    );
+export async function POST(req: NextRequest) {
+  const sig = req.headers.get("stripe-signature");
+  if (!sig) {
+    return new NextResponse("Missing signature", { status: 400 });
   }
 
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  if (!webhookSecret) {
-    console.error("STRIPE_WEBHOOK_SECRET is not set");
-    return NextResponse.json(
-      { error: "Webhook secret not configured" },
-      { status: 500 }
-    );
-  }
+  const buf = await req.arrayBuffer();
+  const body = Buffer.from(buf);
 
   let event: Stripe.Event;
 
   try {
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-  } catch (err: any) {
-    console.error("Webhook signature verification failed:", err.message);
-    return NextResponse.json(
-      { error: `Webhook Error: ${err.message}` },
-      { status: 400 }
+    event = stripe.webhooks.constructEvent(
+      body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET!
     );
+  } catch (err: any) {
+    console.error("Webhook signature verification failed", err.message);
+    return new NextResponse("Signature verification failed", { status: 400 });
   }
 
+  // Handle events
   try {
-    // Handle different event types
     switch (event.type) {
-      case "checkout.session.completed":
-        await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        await handleCheckoutSessionCompleted(session);
         break;
+      }
 
-      case "invoice.paid":
-        await handleInvoicePaid(event.data.object as Stripe.Invoice);
+      case "invoice.paid": {
+        const invoice = event.data.object as Stripe.Invoice;
+        await handleInvoicePaid(invoice);
         break;
+      }
 
-      case "customer.subscription.deleted":
-        await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
+        await handleSubscriptionDeleted(subscription);
         break;
+      }
 
-      case "invoice.payment_failed":
+      case "invoice.payment_failed": {
         // Optional: handle failed payments
         console.log("Payment failed for invoice:", event.data.object);
         break;
+      }
 
       default:
         console.log(`Unhandled event type: ${event.type}`);
+        break;
     }
 
-    return NextResponse.json({ received: true });
+    return new NextResponse("OK", { status: 200 });
   } catch (error: any) {
     console.error("Error processing webhook:", error);
-    return NextResponse.json(
-      { error: error.message || "Webhook processing failed" },
+    return new NextResponse(
+      JSON.stringify({ error: error.message || "Webhook processing failed" }),
       { status: 500 }
     );
   }
