@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * This route:
  * 1. Takes a startup ID from query params (startupId)
  * 2. Verifies the startup exists
- * 3. Generates a Stripe Connect OAuth URL with read_only scope
+ * 3. Generates a Stripe Connect OAuth URL with read_write scope
  * 4. Redirects the user to Stripe
  * 
  * After OAuth, Stripe redirects to /api/providers/stripe/callback
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
-      scope: "read_only",
+      scope: "read_write",
       redirect_uri: redirectUri,
       state: startupId, // EXACTLY the startup.id as a string
     });

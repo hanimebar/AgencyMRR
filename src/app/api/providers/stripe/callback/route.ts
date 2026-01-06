@@ -138,7 +138,7 @@ export async function GET(req: NextRequest) {
           provider_connection_id: connectionId,
           access_token: accessToken,
           refresh_token: refreshToken || null,
-          scope: "read_only",
+          scope: "read_write",
           updated_at: now,
         },
         {
