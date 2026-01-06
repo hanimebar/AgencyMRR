@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { getProviderAdapter } from "@/lib/providers/registry";
+
+export const dynamic = "force-dynamic";
+
+const stripe = new Stripe(process.env.STRIPE_PLATFORM_SECRET_KEY || "", {
+  apiVersion: "2023-10-16",
+});
 
 /**
  * Handle Stripe OAuth callback
  * 
  * This route:
  * 1. Receives OAuth code from Stripe
- * 2. Exchanges code for access token
+ * 2. Exchanges code for access token using Stripe SDK
  * 3. Stores connection and token in database
  * 4. Immediately fetches metrics using the adapter
  * 5. Updates startup_metrics_current and history
@@ -23,75 +30,59 @@ export async function GET(request: NextRequest) {
     const error = searchParams.get("error");
 
     if (error) {
+      console.error("Stripe OAuth error:", error);
       return NextResponse.redirect(
         `${baseUrl}/submit?error=${error}`
       );
     }
 
     if (!code || !state) {
+      console.error("Missing code or state in callback");
       return NextResponse.redirect(
         `${baseUrl}/submit?error=missing_params`
       );
     }
 
-    // Decode state to get startup ID
-    let startupId: string;
-    try {
-      const decoded = JSON.parse(Buffer.from(state, "base64").toString());
-      startupId = decoded.startupId;
-    } catch {
-      return NextResponse.redirect(
-        `${baseUrl}/submit?error=invalid_state`
-      );
-    }
+    // Treat state as startupId directly (UUID string)
+    const startupId = state;
 
-    // Exchange code for access token
-    // Stripe Connect OAuth uses client_id and client_secret
-    const clientId = process.env.STRIPE_CLIENT_ID;
-    const clientSecret = process.env.STRIPE_PLATFORM_SECRET_KEY;
-
-    if (!clientId || !clientSecret) {
-      throw new Error("Stripe credentials not configured");
-    }
-
-    const tokenResponse = await fetch("https://connect.stripe.com/oauth/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        client_id: clientId,
-        client_secret: clientSecret,
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      console.error("Stripe OAuth error:", errorText);
-      throw new Error("Failed to exchange OAuth code");
-    }
-
-    const response = await tokenResponse.json();
-
-    const accountId = response.stripe_user_id;
-    const accessToken = response.access_token;
-    const refreshToken = response.refresh_token;
-
-    if (!accountId || !accessToken) {
-      throw new Error("Missing account ID or access token from Stripe");
-    }
-
-    // Get startup to get slug for redirect
+    // Verify startup exists
     const { data: startup, error: startupError } = await supabaseAdmin
       .from("startups")
-      .select("slug")
+      .select("id, slug")
       .eq("id", startupId)
       .single();
 
     if (startupError || !startup) {
-      throw new Error("Startup not found");
+      console.error("Startup not found for ID:", startupId, startupError);
+      return NextResponse.redirect(
+        `${baseUrl}/submit?error=startup_not_found`
+      );
+    }
+
+    // Exchange code for access token using Stripe SDK
+    let tokenResponse;
+    try {
+      tokenResponse = await stripe.oauth.token({
+        grant_type: "authorization_code",
+        code,
+      });
+    } catch (stripeError: any) {
+      console.error("Stripe token exchange failed:", stripeError);
+      return NextResponse.redirect(
+        `${baseUrl}/submit?error=token_exchange_failed`
+      );
+    }
+
+    const stripeAccountId = tokenResponse.stripe_user_id;
+    const accessToken = tokenResponse.access_token;
+    const refreshToken = tokenResponse.refresh_token;
+
+    if (!stripeAccountId || !accessToken) {
+      console.error("Missing account ID or access token from Stripe");
+      return NextResponse.redirect(
+        `${baseUrl}/submit?error=missing_stripe_data`
+      );
     }
 
     // Create or update provider connection
@@ -109,7 +100,7 @@ export async function GET(request: NextRequest) {
       const { data: updated, error: updateError } = await supabaseAdmin
         .from("provider_connections")
         .update({
-          provider_account_id: accountId,
+          provider_account_id: stripeAccountId,
           status: "connected",
           last_synced_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -118,7 +109,10 @@ export async function GET(request: NextRequest) {
         .select()
         .single();
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("Error updating provider connection:", updateError);
+        throw updateError;
+      }
       connectionId = updated.id;
 
       // Update token
@@ -137,7 +131,7 @@ export async function GET(request: NextRequest) {
         .insert({
           startup_id: startupId,
           provider: "stripe",
-          provider_account_id: accountId,
+          provider_account_id: stripeAccountId,
           status: "connected",
           connected_at: new Date().toISOString(),
           last_synced_at: new Date().toISOString(),
@@ -145,7 +139,10 @@ export async function GET(request: NextRequest) {
         .select()
         .single();
 
-      if (connError) throw connError;
+      if (connError) {
+        console.error("Error creating provider connection:", connError);
+        throw connError;
+      }
       connectionId = connection.id;
 
       // Create token
@@ -153,7 +150,7 @@ export async function GET(request: NextRequest) {
         provider_connection_id: connectionId,
         access_token: accessToken,
         refresh_token: refreshToken,
-        scope: "read_only",
+        scope: "read_write",
       });
     }
 
@@ -162,7 +159,7 @@ export async function GET(request: NextRequest) {
       const adapter = getProviderAdapter("stripe");
       const metrics = await adapter.fetchMetrics({
         providerConnectionId: connectionId,
-        providerAccountId: accountId,
+        providerAccountId: stripeAccountId,
         accessToken,
         refreshToken,
       });
@@ -193,19 +190,19 @@ export async function GET(request: NextRequest) {
         provider: "stripe",
         snapshot_date: new Date().toISOString().split("T")[0],
       });
-    } catch (metricsError) {
+    } catch (metricsError: any) {
       console.error("Error fetching metrics:", metricsError);
       // Don't fail the OAuth flow if metrics fail - we can retry later
     }
 
-    // Redirect to startup page
+    // Redirect to startup page with success indicator
     return NextResponse.redirect(
       `${baseUrl}/startup/${startup.slug}?connected=1`
     );
   } catch (error: any) {
     console.error("Error in Stripe callback:", error);
     return NextResponse.redirect(
-      `${baseUrl}/submit?error=${encodeURIComponent(error.message)}`
+      `${baseUrl}/submit?error=${encodeURIComponent(error.message || "unknown_error")}`
     );
   }
 }

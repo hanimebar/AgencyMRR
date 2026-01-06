@@ -4,14 +4,17 @@ import { formatCurrency, formatRelativeTime, getCountryFlag, isNordicCountry } f
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StartupMetricsChart } from "@/components/StartupMetricsChart";
 import { SponsorshipCTA } from "@/components/SponsorshipCTA";
+import { ConnectionSuccessNotice } from "@/components/ConnectionSuccessNotice";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
 
 export default async function StartupDetailPage({
   params,
+  searchParams,
 }: {
   params: { slug: string };
+  searchParams: { connected?: string };
 }) {
   const startup = await getStartupBySlug(params.slug);
 
@@ -25,6 +28,11 @@ export default async function StartupDetailPage({
   return (
     <div className="min-h-screen container mx-auto px-4 py-16">
       <div className="max-w-4xl mx-auto">
+        {/* Success Notice */}
+        {searchParams.connected === "1" && (
+          <ConnectionSuccessNotice />
+        )}
+        
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-start justify-between mb-4">

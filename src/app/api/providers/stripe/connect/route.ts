@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
 
 /**
  * Generate Stripe Connect OAuth URL and redirect founder
  * 
  * This route:
  * 1. Takes a startup ID from query params
- * 2. Generates a Stripe Connect OAuth URL with read_write scopes
- * 3. Redirects the user to Stripe
+ * 2. Verifies the startup exists
+ * 3. Generates a Stripe Connect OAuth URL with read_write scopes
+ * 4. Redirects the user to Stripe
  * 
  * After OAuth, Stripe redirects to /api/providers/stripe/callback
  * 
@@ -21,6 +25,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Missing startup ID" }, { status: 400 });
     }
 
+    // Verify startup exists
+    const { data: startup, error: startupError } = await supabaseAdmin
+      .from("startups")
+      .select("id")
+      .eq("id", startupId)
+      .single();
+
+    if (startupError || !startup) {
+      return NextResponse.json(
+        { error: "Startup not found" },
+        { status: 404 }
+      );
+    }
+
     const baseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
     const redirectUri = `${baseUrl}/api/providers/stripe/callback`;
     const clientId = process.env.STRIPE_CLIENT_ID;
@@ -32,9 +50,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Store startup ID in state (base64 encoded JSON)
-    // In production, use a secure session/token system
-    const state = Buffer.from(JSON.stringify({ startupId })).toString("base64");
+    // Use startupId directly as state (just the UUID as a string)
+    const state = startupId;
 
     // Stripe Connect OAuth URL
     // See: https://stripe.com/docs/connect/oauth-reference
