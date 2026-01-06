@@ -50,6 +50,8 @@ export interface StartupWithMetrics extends Startup {
 
 /**
  * Get all startups with their current metrics and active sponsorships
+ * 
+ * Note: Sponsorships are fetched separately to avoid relational expansion issues
  */
 export async function getStartupsWithMetrics(filters?: {
   country?: string[];
@@ -59,13 +61,12 @@ export async function getStartupsWithMetrics(filters?: {
   maxMrr?: number;
   sortBy?: "mrr" | "last_30d_revenue" | "total_revenue";
 }): Promise<StartupWithMetrics[]> {
-  // Get all startups with metrics and sponsorships
+  // Get all startups with metrics (no sponsorships in select)
   let query = supabaseAdmin
     .from("startups")
     .select(`
       *,
-      startup_metrics_current (*),
-      sponsorships (*)
+      startup_metrics_current (*)
     `);
 
   // Apply filters
@@ -77,15 +78,34 @@ export async function getStartupsWithMetrics(filters?: {
     query = query.in("category", filters.category);
   }
 
-  const { data, error } = await query;
+  const { data: startupsData, error } = await query;
 
   if (error) throw error;
 
-  // Process startups and find active sponsorships
-  let allStartups = (data || []).map((s: any) => {
-    const activeSponsorship = (s.sponsorships || []).find(
-      (sp: any) => sp.status === "active"
-    ) || null;
+  // Fetch active sponsorships separately
+  const startupIds = (startupsData || []).map((s: any) => s.id);
+  
+  let sponsorships: Sponsorship[] = [];
+  if (startupIds.length > 0) {
+    const { data: sponsorshipsData, error: sponsorshipError } = await supabaseAdmin
+      .from("sponsorships")
+      .select("id, startup_id, type, category, status, stripe_customer_id, stripe_subscription_id, start_date, end_date")
+      .in("startup_id", startupIds)
+      .eq("status", "active");
+
+    if (!sponsorshipError && sponsorshipsData) {
+      sponsorships = sponsorshipsData as Sponsorship[];
+    }
+  }
+
+  // Build a map of active sponsorships by startup_id
+  const sponsoredByStartupId = new Map(
+    sponsorships.map((s) => [s.startup_id, s])
+  );
+
+  // Process startups and attach sponsorships
+  let allStartups = (startupsData || []).map((s: any) => {
+    const activeSponsorship = sponsoredByStartupId.get(s.id) || null;
 
     return {
       ...s,
@@ -131,14 +151,16 @@ export async function getStartupsWithMetrics(filters?: {
 
 /**
  * Get startup by slug with active sponsorship
+ * 
+ * Note: Sponsorships are fetched separately to avoid relational expansion issues
  */
 export async function getStartupBySlug(slug: string): Promise<StartupWithMetrics | null> {
-  const { data, error } = await supabaseAdmin
+  // Fetch startup with metrics (no sponsorships in select)
+  const { data: startupData, error } = await supabaseAdmin
     .from("startups")
     .select(`
       *,
-      startup_metrics_current (*),
-      sponsorships (*)
+      startup_metrics_current (*)
     `)
     .eq("slug", slug)
     .single();
@@ -148,14 +170,19 @@ export async function getStartupBySlug(slug: string): Promise<StartupWithMetrics
     throw error;
   }
 
-  // Get active sponsorship
-  const activeSponsorship = (data.sponsorships || []).find(
-    (s: any) => s.status === "active"
-  ) || null;
+  // Fetch active sponsorship separately
+  const { data: sponsorshipData, error: sponsorshipError } = await supabaseAdmin
+    .from("sponsorships")
+    .select("id, startup_id, type, category, status, stripe_customer_id, stripe_subscription_id, start_date, end_date")
+    .eq("startup_id", startupData.id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  const activeSponsorship = (sponsorshipError || !sponsorshipData) ? null : (sponsorshipData as Sponsorship);
 
   return {
-    ...data,
-    metrics: data.startup_metrics_current?.[0] || null,
+    ...startupData,
+    metrics: startupData.startup_metrics_current?.[0] || null,
     sponsorship: activeSponsorship,
   } as StartupWithMetrics;
 }

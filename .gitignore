@@ -35,3 +35,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+node_modules
+.next
+.turbo
+.vercel
+.git
+.husky
+coverage
+dist
+build
+supabase/.branches
+supabase/.temp
+
