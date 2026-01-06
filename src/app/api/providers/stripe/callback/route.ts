@@ -14,6 +14,8 @@ import { getProviderAdapter } from "@/lib/providers/registry";
  * 6. Redirects to startup detail page
  */
 export async function GET(request: NextRequest) {
+  const baseUrl = process.env.APP_BASE_URL || "http://localhost:3000";
+  
   try {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get("code");
@@ -22,13 +24,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       return NextResponse.redirect(
-        `${process.env.APP_BASE_URL || "http://localhost:3000"}/submit?error=${error}`
+        `${baseUrl}/submit?error=${error}`
       );
     }
 
     if (!code || !state) {
       return NextResponse.redirect(
-        `${process.env.APP_BASE_URL || "http://localhost:3000"}/submit?error=missing_params`
+        `${baseUrl}/submit?error=missing_params`
       );
     }
 
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest) {
       startupId = decoded.startupId;
     } catch {
       return NextResponse.redirect(
-        `${process.env.APP_BASE_URL || "http://localhost:3000"}/submit?error=invalid_state`
+        `${baseUrl}/submit?error=invalid_state`
       );
     }
 
@@ -198,12 +200,12 @@ export async function GET(request: NextRequest) {
 
     // Redirect to startup page
     return NextResponse.redirect(
-      `${process.env.APP_BASE_URL || "http://localhost:3000"}/startup/${startup.slug}?connected=1`
+      `${baseUrl}/startup/${startup.slug}?connected=1`
     );
   } catch (error: any) {
     console.error("Error in Stripe callback:", error);
     return NextResponse.redirect(
-      `${process.env.APP_BASE_URL || "http://localhost:3000"}/submit?error=${encodeURIComponent(error.message)}`
+      `${baseUrl}/submit?error=${encodeURIComponent(error.message)}`
     );
   }
 }
