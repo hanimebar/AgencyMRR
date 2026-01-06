@@ -78,6 +78,13 @@ export default function SubmitPage() {
             <CardTitle className="text-3xl">List Your Startup</CardTitle>
             <CardDescription>
               Add your startup to the AgencyMRR leaderboard. Connect your payment provider to verify your metrics.
+              <br />
+              <span className="mt-2 block">
+                Questions? Contact us at{" "}
+                <a href="mailto:reachout@actvli.com" className="text-primary hover:underline">
+                  reachout@actvli.com
+                </a>
+              </span>
             </CardDescription>
           </CardHeader>
           <CardContent>

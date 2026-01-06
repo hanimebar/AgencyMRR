@@ -12,7 +12,8 @@ interface ConnectProviderClientProps {
 
 export function ConnectProviderClient({ startupId, startupName }: ConnectProviderClientProps) {
   const handleConnectStripe = () => {
-    window.location.href = `/api/providers/stripe/connect?startup=${startupId}`;
+    // Use startupId as query param name for consistency
+    window.location.href = `/api/providers/stripe/connect?startupId=${startupId}`;
   };
 
   return (
